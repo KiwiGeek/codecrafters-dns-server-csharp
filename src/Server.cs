@@ -2,6 +2,9 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using CodeCrafters.DnsServer.Classes;
+using CodeCrafters.DnsServer.Extensions;
+using CodeCrafters.DnsServer.Extensions.Enums;
 
 class Program
 {
@@ -28,7 +31,12 @@ class Program
             Console.WriteLine($"Received {receivedData.Length} bytes from {sourceEndPoint}: {receivedString}");
 
             // Create an empty response
-            byte[] response = Encoding.ASCII.GetBytes("");
+            Header emptyHeader = new()
+            {
+                PacketIdentifier = 1234,
+                QueryResponseIndicator = QueryResponseIndicator.Reply
+            };
+            byte[] response = emptyHeader.ToBytes();
 
             // Send response
             udpClient.Send(response, response.Length, sourceEndPoint);
