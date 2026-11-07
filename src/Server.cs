@@ -93,10 +93,18 @@ internal abstract class Program
             // Create an empty response
             Header emptyHeader = new()
             {
-                PacketIdentifier = 1234,
+                PacketIdentifier = incomingHeader.PacketIdentifier,
                 QueryResponseIndicator = QueryResponseIndicator.Reply,
                 QuestionCount = 1,
-                AnswerCount = 1
+                AnswerCount = 1,
+                Opcode = incomingHeader.Opcode,
+                AuthoritativeAnswer = false,
+                Truncated = false,
+                RecursionDesired = incomingHeader.RecursionDesired,
+                RecursionAvailable = false, 
+                ResponseCode = incomingHeader.Opcode == OpCode.Query ? ResponseCode.NoError : ResponseCode.NotImplemented,
+                AuthorityCount = 0,
+                AdditionalCount = 0
             };
 
             Answer answerBytes = new Answer()
