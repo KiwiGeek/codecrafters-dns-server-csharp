@@ -6,6 +6,11 @@
     <RootNamespace>Codecrafters.DnsServer</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);CodeCrafters.DnsServer.Tests/**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Quadruplay.Nibble" Version="1.1.1" />
+  </ItemGroup>
 
 </Project>

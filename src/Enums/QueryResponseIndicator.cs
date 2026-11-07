@@ -1,4 +1,4 @@
-﻿namespace CodeCrafters.DnsServer.Extensions.Enums;
+﻿namespace Codecrafters.DnsServer.Enums;
 
 public enum QueryResponseIndicator
 {
