@@ -43,7 +43,7 @@ internal abstract class Program
             };
             byte[] response = question.ToBytes();
             Console.WriteLine(response.ToHexString());
-            return;*/
+            return;
             byte[] query = [0x81,0x62,0x01,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x0c,
                             0x63,0x6f,0x64,0x65,0x63,0x72,0x61,0x66,0x74,0x65,0x72,0x73,0x02,
                             0x69,0x6f,0x00,0x00,0x01,0x00,0x01];
@@ -51,7 +51,19 @@ internal abstract class Program
             int index = 12;
             Question incomingQuestion = Question.FromBytes(query, ref index);
             Console.WriteLine(JsonSerializer.Serialize(incomingHeader));
-            Console.WriteLine(JsonSerializer.Serialize(incomingQuestion));
+            Console.WriteLine(JsonSerializer.Serialize(incomingQuestion));*/
+
+            Answer answer = new Answer()
+            {
+                Address = IPAddress.Parse("127.1.2.3"),
+                Class = Class.Internet,
+                Length = 4,
+                Name = "codecrafters.io",
+                TimeToLive = 4,
+                Type = Type.HostAddress
+            };
+            Console.WriteLine(answer.ToBytes().ToHexString());
+
             return;
         }
         
@@ -83,9 +95,21 @@ internal abstract class Program
             {
                 PacketIdentifier = 1234,
                 QueryResponseIndicator = QueryResponseIndicator.Reply,
-                QuestionCount = 1
+                QuestionCount = 1,
+                AnswerCount = 1
             };
-            byte[] response = [..emptyHeader.ToBytes(),.. incomingQuestion.ToBytes()];
+
+            Answer answerBytes = new Answer()
+            {
+                Name = incomingQuestion.Name,
+                Address = IPAddress.Parse("127.0.0.1"),
+                Class = incomingQuestion.Class,
+                Length = 4,
+                TimeToLive = 40,
+                Type = incomingQuestion.Type
+            };
+            
+            byte[] response = [..emptyHeader.ToBytes(),.. incomingQuestion.ToBytes(), .. answerBytes.ToBytes()];
             
             // Send response
             udpClient.Send(response, response.Length, sourceEndPoint);
