@@ -14,8 +14,7 @@ public class Answer
 
     public byte[] ToBytes()
     {
-        int numberOfDots = Name.Count(f => f == '.');
-        int lengthOfLabel = Name.Length + numberOfDots + 1;
+        int lengthOfLabel = Name.Length + 2;
         byte[] responseBytes = new byte[lengthOfLabel+14];
         int i = 0;
         foreach (string s in Name.Split('.'))
