@@ -1,82 +1,22 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using CodeCrafters.DnsServer.Classes;
 using Codecrafters.DnsServer.Enums;
 using CodeCrafters.DnsServer.Extensions;
-using Type = CodeCrafters.DnsServer.Classes.Type;
-
 namespace Codecrafters.DnsServer;
 
 internal abstract class Program
 {
+    private static string _resolverServer = string.Empty;
+    
     static void Main(string[] args)
     {
-       /* if (args[0] == "local")
+        if (args.Count() == 2)
         {
-            Header emptyHeader = new()
-            {
-                PacketIdentifier = 1234,
-                QueryResponseIndicator = QueryResponseIndicator.Question,
-                QuestionCount = 3,
-                AnswerCount = 1,
-                AuthorityCount = 10,
-                AdditionalCount = 16,
-                Opcode = OpCode.Query,
-                AuthoritativeAnswer= true,
-                Truncated = true,
-                RecursionDesired = true,
-                RecursionAvailable = true,
-                ResponseCode = ResponseCode.YxRrSet,
-            };
-            byte[] response = emptyHeader.ToBytes();
-            Console.WriteLine(response.ToHexString());
-            return;*/
-/*
-            Question question = new()
-            {
-                Name = "google.com",
-                Class = Class.Internet,
-                Type = Type.HostAddress
-            };
-            byte[] response = question.ToBytes();
-            Console.WriteLine(response.ToHexString());
-            return;
-            Header incomingHeader = Header.FromBytes(query[..12]);
-            int index = 12;
-            Question incomingQuestion = Question.FromBytes(query, ref index);
-            Console.WriteLine(JsonSerializer.Serialize(incomingHeader));
-            Console.WriteLine(JsonSerializer.Serialize(incomingQuestion));
-
-            Answer answer = new Answer()
-            {
-                Address = IPAddress.Parse("127.1.2.3"),
-                Class = Class.Internet,
-                Length = 4,
-                Name = "codecrafters.io",
-                TimeToLive = 4,
-                Type = Type.HostAddress
-            };
-            Console.WriteLine(answer.ToBytes().ToHexString());
-            byte[] query = [0x02, 0x8d, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x61, 0x62, 
-                            0x63, 0x11, 0x6c, 0x6f, 0x6e, 0x67, 0x61, 0x73, 0x73, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 
-                            0x6e, 0x61, 0x6d, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01, 0x00, 0x01, 0x03, 0x64, 
-                            0x65, 0x66, 0xc0, 0x10, 0x00, 0x01, 0x00, 0x01];
-            Header incomingHeader = Header.FromBytes(query[..12]);
-            int index = 12;
-            List<Question> incomingQuestions = [];
-            Console.WriteLine(JsonSerializer.Serialize(incomingHeader));
-            while (index < query.Length)
-            {
-                Question incomingQuestion = Question.FromBytes(query, ref index);
-                incomingQuestions.Add(incomingQuestion);
-            }
-            Console.WriteLine(JsonSerializer.Serialize(incomingQuestions));
-            return;
+            Debug.Assert(args[0] == "--resolver");
+            _resolverServer = args[1];
         }
-        */
         
         // Resolve UDP address
         IPAddress ipAddress = IPAddress.Parse("127.0.0.1");
@@ -91,6 +31,8 @@ internal abstract class Program
             // Receive data
             IPEndPoint sourceEndPoint = new IPEndPoint(IPAddress.Any, 0);
             byte[] receivedData = udpClient.Receive(ref sourceEndPoint);
+            
+            //Console.WriteLine(receivedData.ToHexString());
             Header incomingHeader = Header.FromBytes(receivedData[..12]);
             int index = 12;
             List<Question> incomingQuestions = [];
@@ -99,7 +41,7 @@ internal abstract class Program
                 Question incomingQuestion = Question.FromBytes(receivedData, ref index);
                 incomingQuestions.Add(incomingQuestion);
             }
-            
+
             // Create an empty response
             Header responseHeader = new()
             {
@@ -111,8 +53,10 @@ internal abstract class Program
                 AuthoritativeAnswer = false,
                 Truncated = false,
                 RecursionDesired = incomingHeader.RecursionDesired,
-                RecursionAvailable = false, 
-                ResponseCode = incomingHeader.Opcode == OpCode.Query ? ResponseCode.NoError : ResponseCode.NotImplemented,
+                RecursionAvailable = false,
+                ResponseCode = incomingHeader.Opcode == OpCode.Query
+                    ? ResponseCode.NoError
+                    : ResponseCode.NotImplemented,
                 AuthorityCount = 0,
                 AdditionalCount = 0
             };
@@ -121,22 +65,72 @@ internal abstract class Program
             List<byte> answers = [];
             foreach (Question incomingQuestion in incomingQuestions)
             {
-                Answer answerBytes = new Answer()
+                Answer answerBytes;
+                if (_resolverServer == string.Empty)
                 {
-                    Name = incomingQuestion.Name,
-                    Address = IPAddress.Parse("127.0.0.1"),
-                    Class = incomingQuestion.Class,
-                    Length = 4,
-                    TimeToLive = 40,
-                    Type = incomingQuestion.Type
-                };
+                    answerBytes = new Answer()
+                    {
+                        Name = incomingQuestion.Name,
+                        Address = IPAddress.Parse("127.0.0.1"),
+                        Class = incomingQuestion.Class,
+                        Length = 4,
+                        TimeToLive = 40,
+                        Type = incomingQuestion.Type
+                    };
+                }
+                else
+                {
+                    // we send the question on to the next server
+                    answerBytes = GetResponseFromOtherServer(incomingQuestion);
+                }
                 questions.AddRange(incomingQuestion.ToBytes());
                 answers.AddRange(answerBytes.ToBytes());
             }
+
             response.AddRange(questions);
             response.AddRange(answers);
             udpClient.Send(response.ToArray(), response.ToArray().Length, sourceEndPoint);
         }
+        // ReSharper disable once FunctionNeverReturns
+    }
 
+    static Answer GetResponseFromOtherServer(Question incomingQuestion)
+    {
+        byte[] rewrittenQuery = RewriteQuestionForAnotherResolver(incomingQuestion);
+        IPEndPoint ipEndPoint = IPEndPoint.Parse(_resolverServer);
+        UdpClient udpClient = new (6969);
+        udpClient.Send(rewrittenQuery, rewrittenQuery.Length, ipEndPoint);
+        byte[] response = udpClient.Receive(ref ipEndPoint);
+        int index = 12;
+        _ = Question.FromBytes(response, ref index);
+        Answer relayAnswer = Answer.FromBytes(response, ref index);
+        udpClient.Close();
+        return relayAnswer;
+    }
+
+    static byte[] RewriteQuestionForAnotherResolver(Question incomingQuestion)
+    {
+        Header queryHeader = new()
+        {
+            PacketIdentifier = 26985,
+            QueryResponseIndicator = QueryResponseIndicator.Question,
+            QuestionCount = 0x01,
+            AnswerCount = 0x00,
+            Opcode = OpCode.Query,
+            AuthoritativeAnswer = false,
+            Truncated = false,
+            RecursionDesired = false,
+            RecursionAvailable = false,
+            ResponseCode = ResponseCode.NoError,
+            AuthorityCount = 0,
+            AdditionalCount = 0
+        };
+        Question question = new()
+        {
+            Class = incomingQuestion.Class,
+            Name = incomingQuestion.Name,
+            Type = incomingQuestion.Type
+        };
+        return [..queryHeader.ToBytes(), ..question.ToBytes()];
     }
 }

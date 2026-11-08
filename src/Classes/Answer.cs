@@ -40,4 +40,37 @@ public class Answer
         responseBytes[lengthOfLabel + 13] = Address.GetAddressBytes()[3];
         return responseBytes;
     }
+
+    public static Answer FromBytes(byte[] bytes, ref int index)
+    {
+        bool done = false;
+        StringBuilder builder = new();
+        while (!done)
+        {
+            int strLength = bytes[index];
+            builder.Append(Encoding.UTF8.GetString(bytes, index+1, strLength));
+            index += strLength + 1;
+            done = bytes[index] == 0;
+            if (!done) builder.Append('.');
+        }
+        string name = builder.ToString();
+        Type type = (Type)(bytes[index+1] * 256 + bytes[index+2]);
+        Class @class = (Class)(bytes[index+3] * 256 + bytes[index+4]);
+        uint timeToLive =  (uint)(bytes[index+5] * 256 * 256 * 256 
+                                  + bytes[index+6] * 256 * 256
+                                  + bytes[index+7] * 256
+                                  + bytes[index+8]);
+        ushort length = (ushort)(bytes[index+9] * 256 + bytes[index+10]);
+        IPAddress address = new([bytes[index + 11], bytes[index + 12], bytes[index + 13], bytes[index + 14]]);
+
+        return new Answer()
+        {
+            Name = name,
+            Type = type,
+            TimeToLive = timeToLive,
+            Address = address,
+            Class = @class,
+            Length = length
+        };
+    }
 }
